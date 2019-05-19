@@ -1,70 +1,64 @@
-﻿using Microsoft.Extensions.CommandLineUtils;
-using NuSave.Core;
-using System;
-
-namespace NuSave.CLI
+﻿namespace NuSave.CLI
 {
-    class Program
+  using System;
+  using System.Reflection;
+  using Core;
+  using Microsoft.Extensions.CommandLineUtils;
+
+  internal class Program
+  {
+    private const string Version = "1.0.0-preview.2";
+
+    private static void Main(string[] args)
     {
-        const string Version = "1.0.0-preview.2";
+      var app = new CommandLineApplication();
 
-        static void Main(string[] args)
+      var msbuildProject = app.Option("-msbuildProject", "MSBuild Project file", CommandOptionType.SingleValue);
+      var source = app.Option("-source", "Package source", CommandOptionType.SingleValue);
+      var packageId = app.Option("-id", "Package ID", CommandOptionType.SingleValue);
+      var outputDirectory = app.Option("-outputDirectory", "Output directory", CommandOptionType.SingleValue);
+      var packageVersion = app.Option("-version", "Package version", CommandOptionType.SingleValue);
+      var allowPreRelease = app.Option("-allowPreRelease", "Allow pre-release packages", CommandOptionType.NoValue);
+      var allowUnlisted = app.Option("-allowUnlisted", "Allow unlisted packages", CommandOptionType.NoValue);
+      var silent = app.Option("-silent", "Don't write anything to stdout", CommandOptionType.NoValue);
+      var noDownload = app.Option("-noDownload", "Don't download packages", CommandOptionType.NoValue);
+      var json = app.Option("-json", "Dependencies list will be printed in json format", CommandOptionType.NoValue);
+
+      app.Command("version", target => { })
+        .OnExecute(() =>
         {
-            CommandLineApplication app = new CommandLineApplication();
+          var revision = Assembly.GetExecutingAssembly().GetName().Version.Revision.ToString();
+          Console.WriteLine($"{Version}+{revision}");
+          return 0;
+        });
 
-            var msbuildProject = app.Option("-msbuildProject", "MSBuild Project file", CommandOptionType.SingleValue);
-            var source = app.Option("-source", "Package source", CommandOptionType.SingleValue);
-            var packageId = app.Option("-id", "Package ID", CommandOptionType.SingleValue);
-            var outputDirectory = app.Option("-outputDirectory", "Output directory", CommandOptionType.SingleValue);
-            var packageVersion = app.Option("-version", "Package version", CommandOptionType.SingleValue);
-            var allowPreRelease = app.Option("-allowPreRelease", "Allow pre-release packages", CommandOptionType.NoValue);
-            var allowUnlisted = app.Option("-allowUnlisted", "Allow unlisted packages", CommandOptionType.NoValue);
-            var silent = app.Option("-silent", "Don't write anything to stdout", CommandOptionType.NoValue);
-            var noDownload = app.Option("-noDownload", "Don't download packages", CommandOptionType.NoValue);
-            var json = app.Option("-json", "Dependencies list will be printed in json format", CommandOptionType.NoValue);
+      app.HelpOption("-? | --help | -help");
 
-            app.Command("version", (target) => { })
-            .OnExecute(() =>
-            {
-                string revision = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.Revision.ToString();
-                Console.WriteLine($"{Version}+{revision}");
-                return 0;
-            });
+      app.OnExecute(() =>
+      {
+        var outputDirectoryStr = noDownload.HasValue() ? null : outputDirectory.Value();
 
-            app.HelpOption("-? | --help | -help");
+        var downloader = new Downloader(
+          source: source.Value(),
+          outputDirectory: outputDirectoryStr,
+          id: packageId.Value(),
+          version: packageVersion.Value(),
+          allowPreRelease: allowPreRelease.HasValue(),
+          allowUnlisted: allowUnlisted.HasValue(),
+          silent: silent.HasValue(),
+          json: json.HasValue());
 
-            app.OnExecute(() =>
-            {
-                string outputDirectoryStr = noDownload.HasValue() ? null : outputDirectory.Value();
+        if (msbuildProject.HasValue())
+          downloader.ResolveDependencies(msbuildProject.Value());
+        else
+          downloader.ResolveDependencies();
 
-                var downloader = new Downloader(
-                    source: source.Value(),
-                    outputDirectory: outputDirectoryStr,
-                    id: packageId.Value(),
-                    version: packageVersion.Value(),
-                    allowPreRelease: allowPreRelease.HasValue(),
-                    allowUnlisted: allowUnlisted.HasValue(),
-                    silent: silent.HasValue(),
-                    json: json.HasValue());
+        if (!noDownload.HasValue()) downloader.Download();
 
-                if (msbuildProject.HasValue())
-                {
-                    downloader.ResolveDependencies(msbuildProject.Value());
-                }
-                else
-                {
-                    downloader.ResolveDependencies();
-                }
-                
-                if (!noDownload.HasValue())
-                {
-                    downloader.Download();
-                }
+        return 0;
+      });
 
-                return 0;
-            });
-
-            app.Execute(args);
-        }
+      app.Execute(args);
     }
+  }
 }
